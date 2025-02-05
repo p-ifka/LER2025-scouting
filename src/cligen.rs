@@ -1,7 +1,7 @@
 /* LER 2025 scouting app test
  *  binds:
  * app: q; quit, t; toggle auto mode, g; generate output
- * actions: 1234; coral levels, n; net, p; processor
+ * actions: 1234; coral levels, n; net, m; removed algae, p; processor
  * conditions: w; win, a; had auto, s; shallow climb, d; deep climb, r; park
  *
  * press above buttons to add action/conditions to list, press g to generate output,
@@ -26,8 +26,7 @@ use std::time::SystemTime;
 enum ActionType{L1, L2, L3, L4, PROCESSOR, NET, ALGAE, FOUL}
 struct Action {
     a: ActionType,
-    t: u128,
-    points: i32,
+    t: i32,
     auto: bool
 }
 
@@ -64,13 +63,14 @@ impl App {
 
 
             /* actions */
-            KeyCode::Char('1') => {self.actions.push(Action{ a: ActionType::L1, t: self.start_time.elapsed().unwrap().as_millis(), points: 1, auto: self.auto_mode })},
-            KeyCode::Char('2') => {self.actions.push(Action{ a: ActionType::L2, t: self.start_time.elapsed().unwrap().as_millis(), points: 1, auto: self.auto_mode })},
-            KeyCode::Char('3') => {self.actions.push(Action{ a: ActionType::L3, t: self.start_time.elapsed().unwrap().as_millis(), points: 1, auto: self.auto_mode })},
-            KeyCode::Char('4') => {self.actions.push(Action{ a: ActionType::L4, t: self.start_time.elapsed().unwrap().as_millis(), points: 1, auto: self.auto_mode })},
-            KeyCode::Char('n') => {self.actions.push(Action{ a: ActionType::NET, t: self.start_time.elapsed().unwrap().as_millis(), points: 1, auto: self.auto_mode })},
-            KeyCode::Char('p') => {self.actions.push(Action{ a: ActionType::PROCESSOR, t: self.start_time.elapsed().unwrap().as_millis(), points: 1, auto: self.auto_mode })},
-            KeyCode::Char('f') => {self.actions.push(Action{ a: ActionType::FOUL, t: self.start_time.elapsed().unwrap().as_millis(), points: 0, auto: false})},
+            KeyCode::Char('1') => {self.actions.push(Action{ a: ActionType::L1, t: self.start_time.elapsed().unwrap().as_millis() as i32, auto: self.auto_mode })},
+            KeyCode::Char('2') => {self.actions.push(Action{ a: ActionType::L2, t: self.start_time.elapsed().unwrap().as_millis() as i32, auto: self.auto_mode })},
+            KeyCode::Char('3') => {self.actions.push(Action{ a: ActionType::L3, t: self.start_time.elapsed().unwrap().as_millis() as i32, auto: self.auto_mode })},
+            KeyCode::Char('4') => {self.actions.push(Action{ a: ActionType::L4, t: self.start_time.elapsed().unwrap().as_millis() as i32, auto: self.auto_mode })},
+            KeyCode::Char('n') => {self.actions.push(Action{ a: ActionType::NET, t: self.start_time.elapsed().unwrap().as_millis() as i32, auto: self.auto_mode })},
+            KeyCode::Char('p') => {self.actions.push(Action{ a: ActionType::PROCESSOR, t: self.start_time.elapsed().unwrap().as_millis() as i32, auto: self.auto_mode })},
+            KeyCode::Char('m') => {self.actions.push(Action{ a: ActionType::ALGAE, t: self.start_time.elapsed().unwrap().as_millis() as i32, auto: self.auto_mode })},
+            KeyCode::Char('f') => {self.actions.push(Action{ a: ActionType::FOUL, t: self.start_time.elapsed().unwrap().as_millis() as i32, auto: false})},
 
             /* conditions */
 
@@ -99,7 +99,7 @@ impl App {
         }
         s.push(Line::from("\n\n\n action list: "));
         for i in &self.actions {
-            s.push(Line::from(format!("{}: {} @ {}, auto: {}", App::action_type_string(i.a.clone()), i.points, i.t, i.auto)))
+            s.push(Line::from(format!("{} @ {}, auto: {}", App::action_type_string(i.a.clone()), i.t, i.auto)))
         }
         s.push(Line::from("\n\n\n condition list: "));
         let c: String = self.conditions.iter().collect();
@@ -171,6 +171,7 @@ impl App {
         for i in &self.actions {
             s.push_str(App::action_type_bin(i));
         }
+        println!("output generated");
         return s;
     }
 
