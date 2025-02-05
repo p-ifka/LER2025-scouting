@@ -1,5 +1,7 @@
 # LER 2025 scouting app 
-binds:
+
+
+## binds:
 - app: q; quit, t; toggle auto mode, g; generate output
 - actions: 1234; coral levels, n; net, p; processor
 - conditions: w; win, a; had auto, s; shallow climb, d; deep climb, r; park
