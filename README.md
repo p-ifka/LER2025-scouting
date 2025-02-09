@@ -1,5 +1,6 @@
 # LER 2025 scouting app 
 
+
 ## progress
 - [x] produce output given information about a match including:
   - each time the team's robot scores, how they scored, when, and whether it was in auto
@@ -18,9 +19,15 @@
 
 ## output
 the current program will output a string of binary characters formated as such
-| match# | team# | checkbox_ | checkbox_ | checkbox_end | action_type | time | action_type | time |
-|:-------|-------|-----------|-----------|--------------|-------------|------|-------------|------|
-| 8      | 16    | 3         | 3         | 3            | 4           | 32   | 4           | 32   |
+<!-- | match# | team# | checkbox_ | checkbox_ | checkbox_end | action_type | time | action_type | time | -->
+<!-- |:-------|-------|-----------|-----------|--------------|-------------|------|-------------|------| -->
+<!-- | 8      | 16    | 3         | 3         | 3            | 4           | 32   | 4           | 32   | -->
+
+| match# | team# | penalty# | checkbox_ | checkbox_ | checkbox_end | action_type | action_type |
+|:-------|-------|----------|-----------|-----------|--------------|-------------|-------------|
+| 8      | 16    | 8        | 3         | 3         | 3            | 4           | 4           |
+  	   	 
+
 
 > bottom row is # size in bits
 
@@ -30,7 +37,7 @@ the current program will output a string of binary characters formated as such
 the data for checkboxes is recorded as a series of 3-bit sequences, each indicates a different value that is true, the sequence 000 is used to indicate the end of the list of checkbox values
 * 000 : END (placed after last condition, marks start of action list)
 * 111 : free
-* 001 : played match
+* 001 : didn't play match
 * 010 : won match
 * 100 : played defense
 * 011 : had auto
@@ -55,7 +62,7 @@ the data for actions is recorded as a 4-bit sequence indicating the type of acti
 * 1110 : proc auto
 * 1011 : algae teleop
 * 1101 : algae auto
-* 1111 : foul
+* 1111 : 
 
 ## binds:
 - app: q; quit, t; toggle auto mode, g; generate output

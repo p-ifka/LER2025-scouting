@@ -1,15 +1,4 @@
-/* LER 2025 scouting app test
- *  binds:
- * app: q; quit, t; toggle auto mode, g; generate output
- * actions: 1234; coral levels, n; net, m; removed algae, p; processor
- * conditions: w; win, a; had auto, s; shallow climb, d; deep climb, r; park
- *
- * press above buttons to add action/conditions to list, press g to generate output,
- * press t to toggle auto mode, if auto mode is on the action will be recorded as done in autonomous
- * if applicable
- *
- * */
-
+/* LER 2025 scouting app output generator */
 
 
 extern crate ratatui;
@@ -21,9 +10,10 @@ use ratatui::{
     DefaultTerminal, Frame,
 };
 use std::time::SystemTime;
+use std::io;
 
 #[derive(Clone, Copy)]
-enum ActionType{L1, L2, L3, L4, PROCESSOR, NET, ALGAE, FOUL}
+enum ActionType{L1, L2, L3, L4, PROCESSOR, NET, ALGAE}
 struct Action {
     a: ActionType,
     t: i32,
@@ -34,6 +24,7 @@ struct App {
     start_time: SystemTime,
     actions: Vec<Action>,
     conditions: Vec<char>,
+    pen_points: i8,
     auto_mode: bool,
     quit: bool,
     output: String
@@ -70,7 +61,6 @@ impl App {
             KeyCode::Char('n') => {self.actions.push(Action{ a: ActionType::NET, t: self.start_time.elapsed().unwrap().as_millis() as i32, auto: self.auto_mode })},
             KeyCode::Char('p') => {self.actions.push(Action{ a: ActionType::PROCESSOR, t: self.start_time.elapsed().unwrap().as_millis() as i32, auto: self.auto_mode })},
             KeyCode::Char('m') => {self.actions.push(Action{ a: ActionType::ALGAE, t: self.start_time.elapsed().unwrap().as_millis() as i32, auto: self.auto_mode })},
-            KeyCode::Char('f') => {self.actions.push(Action{ a: ActionType::FOUL, t: self.start_time.elapsed().unwrap().as_millis() as i32, auto: false})},
 
             /* conditions */
 
@@ -118,7 +108,6 @@ impl App {
             ActionType::PROCESSOR => {return "proc".to_string()},
             ActionType::ALGAE => {return "algae".to_string()},
             ActionType::NET => {return "net".to_string()},
-            ActionType::FOUL => {return "foul".to_string()}
 
         }
     }
@@ -161,6 +150,10 @@ impl App {
         /* team # */
         s.push_str(format!("{:016b}", 2708).as_str());
 
+	/* team penalty points */
+	s.push_str(format!("{:08b}", self.pen_points).as_str());
+	
+	
         /* conditions */
         for i in &self.conditions {
             s.push_str(App::condition_type_bin(i));
@@ -184,7 +177,6 @@ impl App {
             ActionType::NET => {if x.auto { return "1010" } else { return "0101" }},
             ActionType::PROCESSOR => {if x.auto { return "0111" } else { return "1110" }},
             ActionType::ALGAE => {if x.auto { return "1011" } else { return "1101" }},
-            ActionType::FOUL => {return "1111"},
         }
     }
 
@@ -210,6 +202,7 @@ fn main() {
         start_time: SystemTime::now(),
         actions: Vec::new(),
         conditions: Vec::new(),
+	pen_points: 0,
         auto_mode: true,
         quit: false,
         output: "NONE".to_string()
