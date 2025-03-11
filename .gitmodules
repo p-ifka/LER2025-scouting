@@ -1,0 +1,6 @@
+[submodule "rawdraw"]
+	path = rawdraw
+	url = https://github.com/cntools/rawdraw
+[submodule "cnfa"]
+	path = cnfa
+	url = https://github.com/cntools/cnfa
