@@ -23,11 +23,15 @@ volatile int suspended;
 short screenx, screeny;
 int lastbuttonx = 0;
 int lastbuttony = 0;
+int lastbid = 0; // id of last button pressed
+int lastbt = 0;  // last button pressed highlight timer
+
 int lastmotionx = 0;
 int lastmotiony = 0;
-int lastbid = 0;
 int lastmask = 0;
-int lastkey, lastkeydown;
+
+int lastkey;
+int lastkeydown;
 
 
 
@@ -36,10 +40,10 @@ int hLayout;
 
 /* const int BACKGROUND_COLOR = 0x300000ff; */
 /* const int FOREGROUND_COLOR = 0xffffffff; */
-const int FOREGROUND_COLOR = 0xe4e4efff;
-const int BACKGROUND_COLOR = 0x181818ff;
-const int UI_YELLOW = 0x484848fff;
-const int UI_GREEN = 0x484848ff;
+const long FOREGROUND_COLOR = 0xe4e4efff;
+const long BACKGROUND_COLOR = 0x181818ff;
+const long UI_NORMAL= 0x484848ff;
+const long UI_SELECTED = 0x484848fff;
 
 
 void MakeNotification( const char * channelID, const char * channelName, const char * title, const char * message ) {
@@ -137,12 +141,14 @@ struct GameInfo {
   int cPos; // next free pos of conditions[16]
 };
 struct GameInfo ginfo;
+bool isauto; //whether added actions will be counted as done in autonomous
+
   
 struct Button buttons[32];
 int buttonsN = 0;
 
 struct TextBox textBoxes[32];
-int focusedTextBox = 0;
+int focusedTextBox = -1; // index in textBoxes of the currently focused textbox, assigned to -1 when no box is focused
 int textBoxesN = 0;
 
 char* strappend(const char *orig, char c) {
@@ -172,7 +178,7 @@ void HandleKey( int keycode, int bDown ) {
       textBoxes[focusedTextBox].label = new;
     } else if(keycode >= 48 && keycode <= 57 ) { // 0-9
       if(textBoxes[focusedTextBox].maxChars > strlen(textBoxes[focusedTextBox].label)) {
-	char num[1];
+	char num[6];
 	sprintf(num, "%d", keycode-48);
 	char* new = strappend(textBoxes[focusedTextBox].label, num[0]);
 	textBoxes[focusedTextBox].label = new;
@@ -195,7 +201,8 @@ void HandleButton( int x, int y, int button, int bDown ) {
     for(i=0;i<sizeof(buttons)/sizeof(buttons[0]);i++) {
       struct Button b = buttons[i];
       if((x >= b.fromX && x <= b.toX) && (y >= b.fromY && y <= b.toY)) {
-	lastbid = 1;
+	lastbid = b.id;
+	lastbt = 15;
 	b.onClicked(b.id);
 	return;
       }
@@ -210,12 +217,12 @@ void HandleButton( int x, int y, int button, int bDown ) {
 	return;
       }
     }
-    focusedTextBox = 0;
-  AndroidDisplayKeyboard(0);
+    focusedTextBox = -1;
+    AndroidDisplayKeyboard(0);
 
-  lastbid = 0;
-  lastbuttonx = x;
-  lastbuttony = y;
+    lastbid = 0;
+    lastbuttonx = x;
+    lastbuttony = y;
 
   }
   }
@@ -243,43 +250,116 @@ void setPen(int x, int y) {
   CNFGPenY = y;
 }
 
-
-void centerText(char* text, int fontSize) {
-  int penX = screenx/2-(strlen(text)*fontSize*1.5);
-  char wrapc;
-  int wraps;
-  setPen(penX, screeny/2);
-  CNFGColor(FOREGROUND_COLOR);
-  CNFGDrawText(text, fontSize);
+void initGinfo() {
+  int i;
+  ginfo.teamNumber = 0;
+  ginfo.matchNumber = 0;
+  for(i=0;i<sizeof(ginfo.scores)/sizeof(ginfo.scores[0]);i++) {
+    ginfo.scores[i] = -1;
+  }
+  ginfo.sPos = 0;
+  for(i=0;i<sizeof(ginfo.conditions)/sizeof(ginfo.conditions[0]);i++) {
+    ginfo.conditions[i] = -1;
+  }
+  ginfo.cPos = 0;
 }
 
-void lineNum(int lines) {
-  int lineSize = screeny/lines;
-  int i;
-  int ys[lines];
-  for(i=0;i<lines;i++) {
-    int l = i * lineSize;
-    setPen(0, l);
-    char num[3];
-    sprintf(num, "%d", i);
-    CNFGDrawText(num, lineSize/15);
+void addScore(int type) {
+  ginfo.scores[ginfo.sPos] = type+isauto;
+  ++ginfo.sPos;
+}
+
+void undoAddScore() {
+  ginfo.scores[ginfo.sPos-1] = -1;
+  --ginfo.sPos;
+}
+
+void addCondition(int type) {
+  ginfo.conditions[ginfo.cPos] = type;
+  ++ginfo.cPos;
+}
+
+char* scoreStr(int sc) {
+  char s[32];
+  switch (sc) {
+  case 1:
+    return "L1";
+    break;
+  case 2:
+    return "L1Auto";
+    break;
+  case 3:
+    return "L2";
+    break;
+  case 4:
+    return "L2Auto";
+    break;
+  case 5:
+    return "L3";
+    break;
+  case 6:
+    return "L3Auto";
+    break;
+  case 7:
+    return "L4";
+    break;
+  case 8:
+    return "L4Auto";
+    break;
+  case 9:
+    return "rmv Algae";
+    break;
+  case 10:
+    return "rmv AlgeaAuto";
+    break;
+  case 11:
+    return "Processor";
+    break;
+  case 12:
+    return "ProcessorAuto";
+    break;
+  case 13:
+    return "Net";
+    break;
+  case 14:
+    return "NetAuto";
+    break;
+  default:
+    return "none";
+    
+    
+    
+	
   }
 }
 
-void renderButton(struct Button b) {
-  CNFGColor( 0xf44444ff );
-  CNFGTackRectangle(b.fromX, b.fromY, b.toX, b.toY);
-  int xCenter = ((b.fromX + b.toX) / 2)-strlen(b.label)*b.labelSize*1.5;
-  int yCenter = ((b.fromY + b.toY) / 2)-b.labelSize;
-  setPen(xCenter, yCenter);
-  CNFGColor( 0xffffffff );
-  CNFGDrawText(b.label, b.labelSize);
-}
+/* void centerText(char* text, int fontSize) { */
+/*   int penX = screenx/2-(strlen(text)*fontSize*1.5); */
+/*   char wrapc; */
+/*   int wraps; */
+/*   setPen(penX, screeny/2); */
+/*   CNFGColor(FOREGROUND_COLOR); */
+/*   CNFGDrawText(text, fontSize); */
+/* } */
+
+/* /\* void lineNum(int lines) { *\/ */
+/*   int lineSize = screeny/lines; */
+/*   int i; */
+/*   int ys[lines]; */
+/*   for(i=0;i<lines;i++) { */
+/*     int l = i * lineSize; */
+/*     setPen(0, l); */
+/*     char num[3]; */
+/*     sprintf(num, "%d", i); */
+/*     CNFGDrawText(num, lineSize/15); */
+/*   } */
+/* } */
+
 
 void createTextBox(
 		   int id, // unique ID of the textbox
-		   int yP, // start y position along 'vLayout'
-		   int xP, // start x position along 'hLayout'
+		   int xP, // start y position along 'vLayout'
+		   int yP, // start x position along 'hLayout'
 		   int sizeX, // number of 'hLayout' positions to stretch
 		   int sizeY, // number of 'vLayout' positions to stretch
 		   int marginX, // margin on each side of the rectangle in pixels
@@ -302,13 +382,56 @@ void createTextBox(
   textBoxes[textBoxesN] = b;
   ++textBoxesN;
 }
-
-void btnClicked(int id) {
-  if(id == '1') {
-    MakeNotification("ler", "ler", "ler", "L1 button clicked");
+void renderTextBox(struct TextBox t) {
+  
+  /* int fromX = (screenx/t.sizeX)*(t.iX/100); */
+  /* int fromY = lines*t.line; */
+  if(textBoxes[focusedTextBox].id == t.id) {
+    CNFGColor(UI_SELECTED);
+  } else {
+    CNFGColor(UI_NORMAL);
   }
+  
+  CNFGTackRectangle(t.fromX, t.fromY, t.toX, t.toY);
+  int xCenter = ((t.fromX + t.toX) / 2)-strlen(t.label)*t.labelSize*1.5;
+  int yCenter = ((t.fromY + t.toY) / 2)-t.labelSize;
+  setPen(xCenter, yCenter);
+  CNFGColor( FOREGROUND_COLOR );
+  CNFGDrawText(t.label, t.labelSize);
 }
 
+
+void btnClicked(int id) {
+  if(id == 'A') {
+    isauto = !isauto;
+  } else if (id == 'u') {
+    undoAddScore();
+  } else if (id == '1') { // L1
+    addScore(1); // L1 occupies score ids 1 and 2, 1=not auto, 2=auto
+  } else if (id == '2') {
+    addScore(3); // L2 occupies score ids 3 and 4 ...
+  } else if (id == '3') {
+    addScore(5); // etc...
+  } else if (id == '4') {
+    addScore(7);
+  } else if (id == 'a') {
+    addScore(9);
+  } else if (id == 'p') {
+    addScore(11);
+  } else if (id == 'n') {
+    addScore(13);
+  }
+	      
+}
+
+int getButton(int id) {
+  for(int i=0; i<buttonsN;i++) {
+    if(buttons[i].id == id) {
+      return i;
+    }
+  }
+  return -1; 
+}
 
 void createButton(int id, int xP, int yP, int sizeX, int sizeY, int marginX, int marginY, char* label) {
   struct Button b;
@@ -320,30 +443,28 @@ void createButton(int id, int xP, int yP, int sizeX, int sizeY, int marginX, int
 
   b.id = id;
   b.label = label;
-
+  b.labelSize = vLayout/10;
   b.onClicked = &btnClicked;
 
   buttons[buttonsN] = b;
   ++buttonsN;
 }
 
-void renderTextBox(struct TextBox t) {
-  
-  /* int fromX = (screenx/t.sizeX)*(t.iX/100); */
-  /* int fromY = lines*t.line; */
-  if(textBoxes[focusedTextBox].id == t.id) {
-    CNFGColor(UI_YELLOW);
+void renderButton(struct Button b) {
+  if(lastbid == b.id && lastbt > 0) {
+    CNFGColor ( UI_SELECTED );
   } else {
-    CNFGColor(UI_GREEN);
+    CNFGColor( UI_NORMAL );
   }
-  
-  CNFGTackRectangle(t.fromX, t.fromY, t.toX, t.toY);
-  int xCenter = ((t.fromX + t.toX) / 2)-strlen(t.label)*t.labelSize*1.5;
-  int yCenter = ((t.fromY + t.toY) / 2)-t.labelSize;
+
+  CNFGTackRectangle(b.fromX, b.fromY, b.toX, b.toY);
+  int xCenter = ((b.fromX + b.toX) / 2)-strlen(b.label)*b.labelSize*1.5;
+  int yCenter = ((b.fromY + b.toY) / 2)-b.labelSize;
   setPen(xCenter, yCenter);
   CNFGColor( FOREGROUND_COLOR );
-  CNFGDrawText(t.label, t.labelSize);
+  CNFGDrawText(b.label, b.labelSize);
 }
+
 
 int main( int argc, char ** argv) {
 	int i, x, y;
@@ -351,7 +472,7 @@ int main( int argc, char ** argv) {
 	double LastFPSTime = OGGetAbsoluteTime();
 	double LastFrameTime = OGGetAbsoluteTime();
 	double SecToWait;
-
+	initGinfo();
 
 	CNFGSetupFullscreen( "Test Bench", 0 );
 
@@ -359,14 +480,22 @@ int main( int argc, char ** argv) {
 	/* initialize layouts */
 	CNFGGetDimensions( &screenx, &screeny );
 	vLayout = screeny/20;
-	hLayout = screenx/5;
+	hLayout = screenx/6;
 
-	createTextBox('0', 0, 0, 0, 0, 0, 0, "", 0); // TODO: not this
-	createTextBox('T', 1, 1, 4, 1, 15, 15, "", 5); //team#  DONT change maxchars to 4
-	createTextBox('M', 2, 1, 4, 1, 15, 15, "", 3); //match# 
+	createTextBox('T', 1, 1, 5, 1, 15, 15, "", 5); //team#  DONT change maxchars to 4
+	createTextBox('M', 1, 2, 5, 1, 15, 15, "", 3); //match# 
 
+	createButton('A', 0, 3, 3, 1, 5, 5, "auto:");
+	createButton('u', 3, 3, 3, 1, 5, 5, "undo last");
 
-	createButton('1', 0, 3, 1, 1, 5, 5, "L1");
+	
+	createButton('1', 0, 5, 2, 1, 5, 10, "L1");
+	createButton('2', 2, 5, 2, 1, 5, 10, "L2");
+	createButton('3', 4, 5, 2, 1, 5, 10, "L3");
+
+	createButton('a', 0, 6, 2, 1, 5, 10, "rmv Algae");
+	createButton('p', 2, 6, 2, 1, 5, 10, "Processor");
+	createButton('n', 4, 6, 2, 1, 5, 10, "Net");
 	while( 1 ) {
 	  int i, pos;
 	  float f;
@@ -385,7 +514,7 @@ int main( int argc, char ** argv) {
 	  // -- render -- //
 
 	  // textboxes
-	  for(i=1;i<textBoxesN;i++) {
+	  for(i=0;i<textBoxesN;i++) {
 	    renderTextBox(textBoxes[i]);
 	  }
 
@@ -398,30 +527,21 @@ int main( int argc, char ** argv) {
 	  CNFGDrawText("team#", vLayout/15);
 	  setPen(hLayout/15, vLayout*2.5);
 	  CNFGDrawText("match#", vLayout/15);
-	  
-	  /* char s[50]; */
-	  /* sprintf(s, "size:: x: %d, y: %d", screenx, screeny); */
-	  /* setPen(10, 10); */
-	  /* CNFGDrawText(s, 10); */
-	  /* setPen(10, 100); */
-	  
 
-	  /* lineNum(20); */
 
-	  /* re-scale layouts, incase screen is flipped */ 
+	  char* lastScore = scoreStr(ginfo.scores[ginfo.sPos-1]);
+	  setPen(hLayout/15, vLayout* 8.5);
+	  CNFGDrawText(lastScore, vLayout/15);
+
 	  vLayout = screeny/20;
 	  hLayout = screenx/3;
 
-	  char b[50];
-	  sprintf(b, "button:: x: %d, y: %d, id: %d, s: %d", lastbuttonx, lastbuttony, lastbid, sizeof(textBoxes));
-	  setPen(0, 9.5 * vLayout);
-	  CNFGDrawText(b, vLayout/15);
 	  
-	  char k[50];
-	  sprintf(k, "keyboard:: last: %d bdown: %d, f: %d, n: %d", lastkey, lastkeydown, focusedTextBox, 1);
-	  setPen(0, 0.5*vLayout);
-	  CNFGDrawText(k, vLayout/15);
-	  
+
+	  char* isAutoLabel = "auto: true";
+	  if(isauto == false) { isAutoLabel = "auto: false"; }
+	
+	  buttons[getButton('A')].label = isAutoLabel;
 	  
 	  /* CNFGColor( 0x303030ff ); */
 	  /* CNFGTackRectangle(10, 3 * l, screenx-10, 4*l); */
@@ -443,11 +563,12 @@ int main( int argc, char ** argv) {
 	  /* CNFGColor( 0x123450ff ); */
 	  /* CNFGDrawText("button text", l/15); */
 	  
-	  centerText("centered text", 10);
+	  /* centerText("centered text", 10); */
 	  frames++;
+	  if(lastbt > 0) {--lastbt;}
 	  CNFGSwapBuffers();
 	  
-	  ThisTime = OGGetAbsoluteTime();
+	  ThisTime = OGGetAbsoluteTime(); 
 	  if( ThisTime > LastFPSTime + 1 ) {
 	    printf( "FPS: %d\n", frames );
 	    frames = 0;
