@@ -5,7 +5,7 @@ all : makecapk.apk
 
 .PHONY : push run
 
-APPNAME?=lerscouring
+APPNAME?=lerscouting
 LABEL?=$(APPNAME)
 APKFILE ?= $(APPNAME).apk
 PACKAGENAME?=org.test.$(APPNAME)

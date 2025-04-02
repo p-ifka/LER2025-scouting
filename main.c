@@ -1,7 +1,17 @@
+// standard libraries
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
+#include <strings.h>
+
+// stuff for UDP
+#include <unistd.h>
+#include <sys/types.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+
+// stuff for android
 #include "os_generic.h"
 #include <GLES3/gl3.h>
 #include <asset_manager.h>
@@ -10,6 +20,7 @@
 #include <android/log.h>
 #include <android/sensor.h>
 #include "CNFGAndroid.h"
+
 
 #define CNFG3D
 #define CNFG_IMPLEMENTATION
@@ -42,76 +53,91 @@ int hLayout;
 /* const int FOREGROUND_COLOR = 0xffffffff; */
 const long FOREGROUND_COLOR = 0xe4e4efff;
 const long BACKGROUND_COLOR = 0x181818ff;
+
 const long UI_NORMAL= 0x484848ff;
 const long UI_SELECTED = 0x484848fff;
 
+const long UI_TRUE_BG = 0x73c936ff;
+const long UI_TRUE_FG = 0x8c36c9ff;
+const long UI_FALSE_BG = 0xf43841ff;
+const long UI_FALSE_FG = 0x0bc7beff;
+
 
 void MakeNotification( const char * channelID, const char * channelName, const char * title, const char * message ) {
-	static int id;
-	id++;
+  static int id;
+  id++;
 
-	const struct JNINativeInterface * env = 0;
-	const struct JNINativeInterface ** envptr = &env;
-	const struct JNIInvokeInterface ** jniiptr = gapp->activity->vm;
-	const struct JNIInvokeInterface * jnii = *jniiptr;
+  const struct JNINativeInterface * env = 0;
+  const struct JNINativeInterface ** envptr = &env;
+  const struct JNIInvokeInterface ** jniiptr = gapp->activity->vm;
+  const struct JNIInvokeInterface * jnii = *jniiptr;
 
-	jnii->AttachCurrentThread( jniiptr, &envptr, NULL);
-	env = (*envptr);
+  jnii->AttachCurrentThread( jniiptr, &envptr, NULL);
+  env = (*envptr);
 
-	jstring channelIDStr = env->NewStringUTF( ENVCALL channelID );
-	jstring channelNameStr = env->NewStringUTF( ENVCALL channelName );
+  jstring channelIDStr = env->NewStringUTF( ENVCALL channelID );
+  jstring channelNameStr = env->NewStringUTF( ENVCALL channelName );
 
-	// Runs getSystemService(Context.NOTIFICATION_SERVICE).
-	jclass NotificationManagerClass = env->FindClass( ENVCALL "android/app/NotificationManager" );
-	jclass activityClass = env->GetObjectClass( ENVCALL gapp->activity->clazz );
-	jmethodID MethodGetSystemService = env->GetMethodID( ENVCALL activityClass, "getSystemService", "(Ljava/lang/String;)Ljava/lang/Object;");
-	jstring notificationServiceName = env->NewStringUTF( ENVCALL "notification" );
-	jobject notificationServiceObj = env->CallObjectMethod( ENVCALL gapp->activity->clazz, MethodGetSystemService, notificationServiceName);
+  // Runs getSystemService(Context.NOTIFICATION_SERVICE).
+  jclass NotificationManagerClass = env->FindClass( ENVCALL "android/app/NotificationManager" );
+  jclass activityClass = env->GetObjectClass( ENVCALL gapp->activity->clazz );
+  jmethodID MethodGetSystemService = env->GetMethodID( ENVCALL activityClass, "getSystemService", "(Ljava/lang/String;)Ljava/lang/Object;");
+  jstring notificationServiceName = env->NewStringUTF( ENVCALL "notification" );
+  jobject notificationServiceObj = env->CallObjectMethod( ENVCALL gapp->activity->clazz, MethodGetSystemService, notificationServiceName);
 
-	// create the Notification channel.
-	jclass notificationChannelClass = env->FindClass( ENVCALL "android/app/NotificationChannel" );
-	jmethodID notificationChannelConstructorID = env->GetMethodID( ENVCALL notificationChannelClass, "<init>", "(Ljava/lang/String;Ljava/lang/CharSequence;I)V" );
-	jobject notificationChannelObj = env->NewObject( ENVCALL notificationChannelClass, notificationChannelConstructorID, channelIDStr, channelNameStr, 3 ); // IMPORTANCE_DEFAULT
-	jmethodID createNotificationChannelID = env->GetMethodID( ENVCALL NotificationManagerClass, "createNotificationChannel", "(Landroid/app/NotificationChannel;)V" );
-	env->CallVoidMethod( ENVCALL notificationServiceObj, createNotificationChannelID, notificationChannelObj );
+  // create the Notification channel.
+  jclass notificationChannelClass = env->FindClass( ENVCALL "android/app/NotificationChannel" );
+  jmethodID notificationChannelConstructorID = env->GetMethodID( ENVCALL notificationChannelClass, "<init>", "(Ljava/lang/String;Ljava/lang/CharSequence;I)V" );
+  jobject notificationChannelObj = env->NewObject( ENVCALL notificationChannelClass, notificationChannelConstructorID, channelIDStr, channelNameStr, 3 ); // IMPORTANCE_DEFAULT
+  jmethodID createNotificationChannelID = env->GetMethodID( ENVCALL NotificationManagerClass, "createNotificationChannel", "(Landroid/app/NotificationChannel;)V" );
+  env->CallVoidMethod( ENVCALL notificationServiceObj, createNotificationChannelID, notificationChannelObj );
 
-	env->DeleteLocalRef( ENVCALL channelNameStr );
-	env->DeleteLocalRef( ENVCALL notificationChannelObj );
+  env->DeleteLocalRef( ENVCALL channelNameStr );
+  env->DeleteLocalRef( ENVCALL notificationChannelObj );
 
-	// Create the Notification builder.
-	jclass classBuilder = env->FindClass( ENVCALL "android/app/Notification$Builder" );
-	jstring titleStr = env->NewStringUTF( ENVCALL title );
-	jstring messageStr = env->NewStringUTF( ENVCALL message );
-	jmethodID eventConstructor = env->GetMethodID( ENVCALL classBuilder, "<init>", "(Landroid/content/Context;Ljava/lang/String;)V" );
-	jobject eventObj = env->NewObject( ENVCALL classBuilder, eventConstructor, gapp->activity->clazz, channelIDStr );
-	jmethodID setContentTitleID = env->GetMethodID( ENVCALL classBuilder, "setContentTitle", "(Ljava/lang/CharSequence;)Landroid/app/Notification$Builder;" );
-	jmethodID setContentTextID = env->GetMethodID( ENVCALL classBuilder, "setContentText", "(Ljava/lang/CharSequence;)Landroid/app/Notification$Builder;" );
-	jmethodID setSmallIconID = env->GetMethodID( ENVCALL classBuilder, "setSmallIcon", "(I)Landroid/app/Notification$Builder;" );
+  // Create the Notification builder.
+  jclass classBuilder = env->FindClass( ENVCALL "android/app/Notification$Builder" );
+  jstring titleStr = env->NewStringUTF( ENVCALL title );
+  jstring messageStr = env->NewStringUTF( ENVCALL message );
+  jmethodID eventConstructor = env->GetMethodID( ENVCALL classBuilder, "<init>", "(Landroid/content/Context;Ljava/lang/String;)V" );
+  jobject eventObj = env->NewObject( ENVCALL classBuilder, eventConstructor, gapp->activity->clazz, channelIDStr );
+  jmethodID setContentTitleID = env->GetMethodID( ENVCALL classBuilder, "setContentTitle", "(Ljava/lang/CharSequence;)Landroid/app/Notification$Builder;" );
+  jmethodID setContentTextID = env->GetMethodID( ENVCALL classBuilder, "setContentText", "(Ljava/lang/CharSequence;)Landroid/app/Notification$Builder;" );
+  jmethodID setSmallIconID = env->GetMethodID( ENVCALL classBuilder, "setSmallIcon", "(I)Landroid/app/Notification$Builder;" );
 
-	// You could do things like setPriority, or setContentIntent if you want it to do something when you click it.
+  // You could do things like setPriority, or setContentIntent if you want it to do something when you click it.
 
-	env->CallObjectMethod( ENVCALL eventObj, setContentTitleID, titleStr );
-	env->CallObjectMethod( ENVCALL eventObj, setContentTextID, messageStr );
-	env->CallObjectMethod( ENVCALL eventObj, setSmallIconID, 17301504 ); // R.drawable.alert_dark_frame
+  env->CallObjectMethod( ENVCALL eventObj, setContentTitleID, titleStr );
+  env->CallObjectMethod( ENVCALL eventObj, setContentTextID, messageStr );
+  env->CallObjectMethod( ENVCALL eventObj, setSmallIconID, 17301504 ); // R.drawable.alert_dark_frame
 
-	// eventObj.build()
-	jmethodID buildID = env->GetMethodID( ENVCALL classBuilder, "build", "()Landroid/app/Notification;" );
-	jobject notification = env->CallObjectMethod( ENVCALL eventObj, buildID );
+  // eventObj.build()
+  jmethodID buildID = env->GetMethodID( ENVCALL classBuilder, "build", "()Landroid/app/Notification;" );
+  jobject notification = env->CallObjectMethod( ENVCALL eventObj, buildID );
 
-	// NotificationManager.notify(...)
-	jmethodID notifyID = env->GetMethodID( ENVCALL NotificationManagerClass, "notify", "(ILandroid/app/Notification;)V" );
-	env->CallVoidMethod( ENVCALL notificationServiceObj, notifyID, id, notification );
+  // NotificationManager.notify(...)
+  jmethodID notifyID = env->GetMethodID( ENVCALL NotificationManagerClass, "notify", "(ILandroid/app/Notification;)V" );
+  env->CallVoidMethod( ENVCALL notificationServiceObj, notifyID, id, notification );
 
-	env->DeleteLocalRef( ENVCALL notification );
-	env->DeleteLocalRef( ENVCALL titleStr );
-	env->DeleteLocalRef( ENVCALL activityClass );
-	env->DeleteLocalRef( ENVCALL messageStr );
-	env->DeleteLocalRef( ENVCALL channelIDStr );
-	env->DeleteLocalRef( ENVCALL NotificationManagerClass );
-	env->DeleteLocalRef( ENVCALL notificationServiceObj );
-	env->DeleteLocalRef( ENVCALL notificationServiceName );
+  env->DeleteLocalRef( ENVCALL notification );
+  env->DeleteLocalRef( ENVCALL titleStr );
+  env->DeleteLocalRef( ENVCALL activityClass );
+  env->DeleteLocalRef( ENVCALL messageStr );
+  env->DeleteLocalRef( ENVCALL channelIDStr );
+  env->DeleteLocalRef( ENVCALL NotificationManagerClass );
+  env->DeleteLocalRef( ENVCALL notificationServiceObj );
+  env->DeleteLocalRef( ENVCALL notificationServiceName );
 }
-
+struct CheckBox {
+  int id;
+  int fromX;
+  int fromY;
+  int toX;
+  int toY;
+  char* label;
+  int labelSize;
+  bool value;
+};
 struct Button {
   int id;
   int fromX;
@@ -135,15 +161,19 @@ struct TextBox {
 struct GameInfo {
   int teamNumber; // number of the team
   int matchNumber; // match being recorded
-  int scores[64]; // list of int identifiers for score actions 
-  int sPos; // the next free pos of scores[64] 
-  int conditions[16]; // list of int identifiers for conditions
-  int cPos; // next free pos of conditions[16]
+  int autoType;
+  int autoAmount;
+  int climbType;
+  int inf[9]; // {brokedown, won, l1, l2, l3, l4, algae, processor, net}
 };
 struct GameInfo ginfo;
 bool isauto; //whether added actions will be counted as done in autonomous
+int gsData[2048];
+int games = 0;
 
-  
+struct CheckBox checkBoxes[32];
+int checkBoxesN = 0;
+
 struct Button buttons[32];
 int buttonsN = 0;
 
@@ -183,21 +213,28 @@ void HandleKey( int keycode, int bDown ) {
 	char* new = strappend(textBoxes[focusedTextBox].label, num[0]);
 	textBoxes[focusedTextBox].label = new;
       }
-      
+
     }
   }
 
-	lastkey = keycode;
-	lastkeydown = bDown;
-	if( keycode == 4 ) { AndroidSendToBack( 1 ); focusedTextBox = 0;}
+  lastkey = keycode;
+  lastkeydown = bDown;
+  if( keycode == 4 ) { AndroidSendToBack( 1 ); focusedTextBox = 0;}
 }
 void HandleButton( int x, int y, int button, int bDown ) {
   /**
    * run every time the user presses the touchscreen
    **/
   if(bDown == 1) {
-  int i;
-  if(sizeof(buttons) > 0) {
+    int i;
+    for(i=0;i<checkBoxesN;i++) {
+      struct CheckBox c = checkBoxes[i];
+      if((x >= c.fromX && x <= c.toX) && (y >= c.fromY && y <= c.toY)) {
+	lastbid = c.id;
+
+	checkBoxes[i].value = !c.value;
+      }
+    }
     for(i=0;i<sizeof(buttons)/sizeof(buttons[0]);i++) {
       struct Button b = buttons[i];
       if((x >= b.fromX && x <= b.toX) && (y >= b.fromY && y <= b.toY)) {
@@ -207,7 +244,6 @@ void HandleButton( int x, int y, int button, int bDown ) {
 	return;
       }
     }
-  }
     for(i=0;i<textBoxesN;i++) {
       struct TextBox t = textBoxes[i];
       if((x >= t.fromX && x <= t.toX) && (y >= t.fromY && y <= t.toY)) {
@@ -225,13 +261,13 @@ void HandleButton( int x, int y, int button, int bDown ) {
     lastbuttony = y;
 
   }
-  }
+}
 
 void HandleMotion( int x, int y, int mask )
 {
-	lastmask = mask;
-	lastmotionx = x;
-	lastmotiony = y;
+  lastmask = mask;
+  lastmotionx = x;
+  lastmotiony = y;
 }
 
 extern struct android_app * gapp;
@@ -251,33 +287,113 @@ void setPen(int x, int y) {
 }
 
 void initGinfo() {
-  int i;
   ginfo.teamNumber = 0;
   ginfo.matchNumber = 0;
-  for(i=0;i<sizeof(ginfo.scores)/sizeof(ginfo.scores[0]);i++) {
-    ginfo.scores[i] = -1;
+  ginfo.autoType = 0;
+  ginfo.autoAmount = 0;
+  ginfo.climbType = 0;
+  for(int i=0;i<sizeof(ginfo.inf)/sizeof(ginfo.inf[0]);i++) {
+    ginfo.inf[i] = 0;
   }
-  ginfo.sPos = 0;
-  for(i=0;i<sizeof(ginfo.conditions)/sizeof(ginfo.conditions[0]);i++) {
-    ginfo.conditions[i] = -1;
+}
+
+
+
+/* int generateOutput(int u) { */
+/*   if(ginfo.teamNumber == 0 || ginfo.matchNumber == 0) { */
+/*     return -1; */
+/*   } */
+/*   int size = 3 + ginfo.iPos; */
+/*   int o[size]; */
+/*   o[0] = size; */
+/*   o[1] = ginfo.matchNumber; */
+/*   o[2] = ginfo.teamNumber; */
+/*   for(int i = 0;i<ginfo.iPos;i++) { */
+/*     o[i+3] = ginfo.inf[i]; */
+/*   } */
+/*   return o; */
+/* } */
+char* generateOutput() {
+  /**
+   * generate output buffer for the current match stored in ginfo, write it to the next
+   * avaliable position of gsData
+   **/
+  struct GameInfo inf = ginfo; // assign ginfo to local variable
+  if(inf.teamNumber <= 0 || inf.matchNumber <= 0) { // check validity of match data
+    return "team/matchnumber invalid";
   }
-  ginfo.cPos = 0;
+  /* create match data array */
+  int size = 14;
+  int o[size];
+  int i;
+  o[0] = inf.matchNumber;
+  o[1] = inf.teamNumber;
+  o[2] = inf.autoType;
+  o[3] = inf.autoAmount;
+  o[4] = inf.climbType;
+  for(i=0;i<sizeof(ginfo.inf)/sizeof(ginfo.inf[0]);i++) {
+    o[5+i] = ginfo.inf[i];
+  }
+
+  /* get index to start at (first non--1 value)*/
+  int start = 1;
+  for(int i=0;i<sizeof(gsData)/sizeof(gsData[0]);i++) {
+    if(gsData[i] != -1) {
+      start = i+1;
+    }
+  }
+  /* fill space of length 'size' with match data, starting at 'start' */
+  for(int i=0;i<size;i++) {
+    gsData[start+i] = o[i];
+  }
+  ++games;
+  return "OK";
 }
 
-void addScore(int type) {
-  ginfo.scores[ginfo.sPos] = type+isauto;
-  ++ginfo.sPos;
+char* sendData(char* ip) {
+
+  gsData[0] = games;
+  int sz = 0;
+  /* get size of data */
+  for(int i=0;i<sizeof(gsData)/sizeof(gsData[0]);i++) {
+    if(gsData[i] == -1) {
+      sz = i;
+      break;
+    }
+  }
+  /* create msgBuffer with ^size */
+  int msgBuffer[sz];
+  for(int i=0;i<sz;i++) {
+    msgBuffer[i] = -1;
+  }
+  for(int i=0;i<sz;i++) {
+    msgBuffer[i] = gsData[i];
+  }
+
+  int sockfd;
+  struct sockaddr_in servaddr;
+
+  // create connection
+  bzero(&servaddr, sizeof(servaddr));
+  servaddr.sin_addr.s_addr = inet_addr(ip);
+  servaddr.sin_port = htons(5000);
+  servaddr.sin_family = AF_INET;
+  sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+
+  // create UDP connection, this will store the server address for future use
+  // (struct sockaddr*)NULL will refer to servaddr
+  if(connect(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr)) < 0) {
+    return "ERR";
+  }
+  // send msgbuffer to address, recieve message back from server
+  sendto(sockfd, msgBuffer, 1000, 0, (struct sockaddr*)NULL, sizeof(servaddr));
+  /* recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr*)NULL, NULL); // second NULL refers to sizeof(servaddr) used above */
+
+  close(sockfd);
+  return "OK";
+
 }
 
-void undoAddScore() {
-  ginfo.scores[ginfo.sPos-1] = -1;
-  --ginfo.sPos;
-}
-
-void addCondition(int type) {
-  ginfo.conditions[ginfo.cPos] = type;
-  ++ginfo.cPos;
-}
 
 char* scoreStr(int sc) {
   char s[32];
@@ -326,10 +442,10 @@ char* scoreStr(int sc) {
     break;
   default:
     return "none";
-    
-    
-    
-	
+
+
+
+
   }
 }
 
@@ -368,7 +484,7 @@ void createTextBox(
 		   int maxChars) // maximum # of characters that can be entered
 {
   struct TextBox b;
-// get spot on hLayout at xP add margin
+  // get spot on hLayout at xP add margin
   b.fromX = (hLayout*xP)+marginX;
   b.toX = (hLayout*(xP+sizeX))-marginX;
   b.fromY = (vLayout*yP)+marginY;
@@ -383,7 +499,7 @@ void createTextBox(
   ++textBoxesN;
 }
 void renderTextBox(struct TextBox t) {
-  
+
   /* int fromX = (screenx/t.sizeX)*(t.iX/100); */
   /* int fromY = lines*t.line; */
   if(textBoxes[focusedTextBox].id == t.id) {
@@ -391,7 +507,7 @@ void renderTextBox(struct TextBox t) {
   } else {
     CNFGColor(UI_NORMAL);
   }
-  
+
   CNFGTackRectangle(t.fromX, t.fromY, t.toX, t.toY);
   int xCenter = ((t.fromX + t.toX) / 2)-strlen(t.label)*t.labelSize*1.5;
   int yCenter = ((t.fromY + t.toY) / 2)-t.labelSize;
@@ -400,28 +516,13 @@ void renderTextBox(struct TextBox t) {
   CNFGDrawText(t.label, t.labelSize);
 }
 
-
-void btnClicked(int id) {
-  if(id == 'A') {
-    isauto = !isauto;
-  } else if (id == 'u') {
-    undoAddScore();
-  } else if (id == '1') { // L1
-    addScore(1); // L1 occupies score ids 1 and 2, 1=not auto, 2=auto
-  } else if (id == '2') {
-    addScore(3); // L2 occupies score ids 3 and 4 ...
-  } else if (id == '3') {
-    addScore(5); // etc...
-  } else if (id == '4') {
-    addScore(7);
-  } else if (id == 'a') {
-    addScore(9);
-  } else if (id == 'p') {
-    addScore(11);
-  } else if (id == 'n') {
-    addScore(13);
+int getTextBox(int id) {
+  for(int i=0;i<textBoxesN;i++) {
+    if(textBoxes[i].id == id) {
+      return i;
+    }
   }
-	      
+  return -1;
 }
 
 int getButton(int id) {
@@ -430,8 +531,83 @@ int getButton(int id) {
       return i;
     }
   }
-  return -1; 
+  return -1;
 }
+
+int getCheckBox(int id) {
+  for(int i=0; i<checkBoxesN;i++) {
+    if(checkBoxes[i].id == id) {
+      return i;
+    }
+  }
+}
+
+void btnClicked(int id) {
+  if(id == 'A') {
+    isauto = !isauto;
+  } else if (id == 'u') {
+    /* undoAddScore(); */
+  } else if (id == '1') { // L1
+    if(isauto) { ginfo.autoType = 1; isauto = false; return;}
+    ++ginfo.inf[2];
+  } else if (id == '2') {
+    if(isauto) { ginfo.autoType = 2; isauto = false; return;}
+    ++ginfo.inf[3];
+  } else if (id == '3') {
+    if(isauto) { ginfo.autoType = 3; isauto = false; return;}
+    ++ginfo.inf[4];
+  } else if (id == '4') {
+    if(isauto) { ginfo.autoType = 4; isauto = false; return;}
+    ++ginfo.inf[5];
+  } else if (id == 'a') {
+    ++ginfo.inf[6];
+  } else if (id == 'p') {
+    ++ginfo.inf[7];
+  } else if (id == 'n') {
+    ++ginfo.inf[8];
+  } else if (id == 'g') {
+    ginfo.inf[9] = 2708;
+    ginfo.matchNumber = atoi(textBoxes[getTextBox('M')].label);
+    ginfo.teamNumber = atoi(textBoxes[getTextBox('T')].label);
+    ginfo.inf[0] = checkBoxes[getCheckBox('b')].value;
+    ginfo.inf[1] = checkBoxes[getCheckBox('w')].value;
+    if(checkBoxes[getCheckBox('d')].value == true) {
+      ginfo.climbType = 2;
+    } else if(checkBoxes[getCheckBox('s')].value == true) {
+      ginfo.climbType = 1;
+    } else {
+      ginfo.climbType = 0;
+    }
+    buttons[getButton('g')].label = generateOutput();
+  } else if(id == 'S') {
+    if(textBoxes[getTextBox('i')].label != "") {
+      sendData(textBoxes[getTextBox('i')].label);
+    } else {
+      /* sendData("192.168.200.79"); */
+      /* sendData("10.106.42.116"); */
+      sendData("192.168.1.112");
+    }
+  }
+
+}
+void createCheckBox(int id, int xP, int yP, int sizeX, int sizeY, int marginX, int marginY, char*label, bool defState) {
+  struct CheckBox b;
+  b.fromX = (hLayout*xP)+marginX;
+  b.toX = (hLayout*(xP+sizeX))-marginX;
+
+  b.fromY = (vLayout*yP)+marginY;
+  b.toY = (vLayout*(yP+sizeY))-marginY;
+
+  b.id = id;
+  b.label = label;
+  b.labelSize = vLayout/10;
+
+  b.value = defState;
+
+  checkBoxes[checkBoxesN] = b;
+  ++checkBoxesN;
+}
+
 
 void createButton(int id, int xP, int yP, int sizeX, int sizeY, int marginX, int marginY, char* label) {
   struct Button b;
@@ -450,9 +626,26 @@ void createButton(int id, int xP, int yP, int sizeX, int sizeY, int marginX, int
   ++buttonsN;
 }
 
+void renderCheckBox(struct CheckBox b) {
+  CNFGColor( UI_NORMAL );
+  CNFGTackRectangle(b.fromX, b.fromY, b.toX, b.toY);
+  int xCenter = ((b.fromX + b.toX) / 2)-strlen(b.label)*b.labelSize*1.5;
+  int yCenter = ((b.fromY + b.toY) / 2)-b.labelSize;
+  if(b.value) {
+    CNFGColor( UI_TRUE_BG );
+  } else {
+    CNFGColor( UI_FALSE_BG );
+  }
+  CNFGTackRectangle(b.fromX, b.fromY, b.toX, b.fromY+15);
+
+  setPen(xCenter, yCenter);
+  CNFGColor( FOREGROUND_COLOR );
+  CNFGDrawText(b.label, b.labelSize);
+}
+
 void renderButton(struct Button b) {
   if(lastbid == b.id && lastbt > 0) {
-    CNFGColor ( UI_SELECTED );
+    CNFGColor( UI_SELECTED );
   } else {
     CNFGColor( UI_NORMAL );
   }
@@ -467,114 +660,159 @@ void renderButton(struct Button b) {
 
 
 int main( int argc, char ** argv) {
-	int i, x, y;
-	double ThisTime;
-	double LastFPSTime = OGGetAbsoluteTime();
-	double LastFrameTime = OGGetAbsoluteTime();
-	double SecToWait;
-	initGinfo();
+  int i, x, y;
+  double ThisTime;
+  double LastFPSTime = OGGetAbsoluteTime();
+  double LastFrameTime = OGGetAbsoluteTime();
+  double SecToWait;
 
-	CNFGSetupFullscreen( "Test Bench", 0 );
+  initGinfo();
+  for(int i=0;i<sizeof(gsData)/sizeof(gsData[0]);i++) {
+    gsData[i] = -1;
+  }
 
-	
-	/* initialize layouts */
-	CNFGGetDimensions( &screenx, &screeny );
-	vLayout = screeny/20;
-	hLayout = screenx/6;
-
-	createTextBox('T', 1, 1, 5, 1, 15, 15, "", 5); //team#  DONT change maxchars to 4
-	createTextBox('M', 1, 2, 5, 1, 15, 15, "", 3); //match# 
-
-	createButton('A', 0, 3, 3, 1, 5, 5, "auto:");
-	createButton('u', 3, 3, 3, 1, 5, 5, "undo last");
-
-	
-	createButton('1', 0, 5, 2, 1, 5, 10, "L1");
-	createButton('2', 2, 5, 2, 1, 5, 10, "L2");
-	createButton('3', 4, 5, 2, 1, 5, 10, "L3");
-
-	createButton('a', 0, 6, 2, 1, 5, 10, "rmv Algae");
-	createButton('p', 2, 6, 2, 1, 5, 10, "Processor");
-	createButton('n', 4, 6, 2, 1, 5, 10, "Net");
-	while( 1 ) {
-	  int i, pos;
-	  float f;
-	  iframeno++;
-	  RDPoint pto[3];
-	  
-	  CNFGHandleInput();
-	  
-	  if( suspended ) { usleep(50000); continue; }
-	  
-	  CNFGClearFrame();
-	  CNFGGetDimensions( &screenx, &screeny );
-	  
-	  CNFGBGColor = BACKGROUND_COLOR;
-	  CNFGColor(FOREGROUND_COLOR);
-	  // -- render -- //
-
-	  // textboxes
-	  for(i=0;i<textBoxesN;i++) {
-	    renderTextBox(textBoxes[i]);
-	  }
-
-	  // buttons
-	  for(i=0;i<buttonsN;i++) {
-	    renderButton(buttons[i]);
-	  }
-
-	  setPen(hLayout/15, vLayout*1.5);
-	  CNFGDrawText("team#", vLayout/15);
-	  setPen(hLayout/15, vLayout*2.5);
-	  CNFGDrawText("match#", vLayout/15);
+  CNFGSetupFullscreen( "Test Bench", 0 );
 
 
-	  char* lastScore = scoreStr(ginfo.scores[ginfo.sPos-1]);
-	  setPen(hLayout/15, vLayout* 8.5);
-	  CNFGDrawText(lastScore, vLayout/15);
+  /* initialize layouts */
+  CNFGGetDimensions( &screenx, &screeny );
+  vLayout = screeny/20;
+  hLayout = screenx/6;
 
-	  vLayout = screeny/20;
-	  hLayout = screenx/3;
+  createTextBox('T', 1, 1, 5, 1, 15, 15, "", 5); //team#  DONT change maxchars to 4
+  createTextBox('M', 1, 2, 5, 1, 15, 15, "", 3); //match#
+  createTextBox('m', 1, 3, 5, 1, 15, 15, "", 2); //auto scores#
+  createTextBox('i', 1, 4, 5, 1, 15, 15, "", 30); //send ip
 
-	  
+  createButton('A', 0, 6, 3, 1, 5, 5, "auto:");
+  createButton('u', 3, 6, 3, 1, 5, 5, "undo last");
 
-	  char* isAutoLabel = "auto: true";
-	  if(isauto == false) { isAutoLabel = "auto: false"; }
-	
-	  buttons[getButton('A')].label = isAutoLabel;
-	  
-	  /* CNFGColor( 0x303030ff ); */
-	  /* CNFGTackRectangle(10, 3 * l, screenx-10, 4*l); */
-	  /* struct Button testButton = Button{fromX:15, fromY:5*l, toX:screenx-15, toY:6*l, }; */
-	  /* struct Button tb; */
-	  /* tb.fromX=15; */
-	  /* tb.fromY=5*l; */
-	  /* tb.toX=screenx-15; */
-	  /* tb.toY=6*l; */
-	  /* tb.label="button text"; */
-	  /* tb.labelSize=l/15; */
-	  /* tb.onClicked = &onClickTest; */
-	  /* renderButton(tb); */
-	  /* buttons[0] = tb; */
-	  
-	  
-	  /* CNFGColor( 0xffffffff ); */
-	  /* setPen(15, (3.5 * l)-(l/15*1.5)); */
-	  /* CNFGColor( 0x123450ff ); */
-	  /* CNFGDrawText("button text", l/15); */
-	  
-	  /* centerText("centered text", 10); */
-	  frames++;
-	  if(lastbt > 0) {--lastbt;}
-	  CNFGSwapBuffers();
-	  
-	  ThisTime = OGGetAbsoluteTime(); 
-	  if( ThisTime > LastFPSTime + 1 ) {
-	    printf( "FPS: %d\n", frames );
-	    frames = 0;
-	    LastFPSTime+=1;
-	  }
-	}
-	
-	return(0);
+
+  createButton('1', 0, 7, 2, 1, 5, 10, "L1");
+  createButton('2', 2, 7, 2, 1, 5, 10, "L2");
+  createButton('3', 4, 7, 2, 1, 5, 10, "L3");
+  createButton('4', 0, 8, 2, 1, 5, 10, "L4");
+
+  createButton('a', 2, 8, 2, 1, 5, 10, "rmv Algae");
+  createButton('p', 4, 8, 2, 1, 5, 10, "Processor");
+  createButton('n', 2, 9, 2, 1, 5, 10, "Net");
+
+  createCheckBox('b', 0, 10, 3, 1, 5, 10, "broke down", false);
+  createCheckBox('w', 3, 10, 3, 1, 5, 10, "won", false);
+
+  createCheckBox('P', 0, 11, 2, 1, 5, 10, "parked", false);
+  createCheckBox('s', 2, 11, 2, 1, 5, 10, "shallow", false);
+  createCheckBox('d', 4, 11, 2, 1, 5, 10, "deep", false);
+
+
+  createButton('g', 0, 18, 6, 1, 5, 10, "save match");
+  createButton('S', 0, 19, 6, 1, 5, 10, "upload data");
+  while( 1 ) {
+    int i, pos;
+    float f;
+    iframeno++;
+    RDPoint pto[3];
+
+    CNFGHandleInput();
+
+    if( suspended ) { usleep(50000); continue; }
+
+    CNFGClearFrame();
+    CNFGGetDimensions( &screenx, &screeny );
+
+    CNFGBGColor = BACKGROUND_COLOR;
+    CNFGColor(FOREGROUND_COLOR);
+    // -- render -- //
+
+    // checkboxes
+    for(i=0;i<checkBoxesN;i++) {
+      renderCheckBox(checkBoxes[i]);
+    }
+
+    // textboxes
+    for(i=0;i<textBoxesN;i++) {
+      renderTextBox(textBoxes[i]);
+    }
+
+    // buttons
+    for(i=0;i<buttonsN;i++) {
+      renderButton(buttons[i]);
+    }
+
+    setPen(hLayout/15, vLayout*1.5);
+    CNFGDrawText("team#", vLayout/15);
+    setPen(hLayout/15, vLayout*2.5);
+    CNFGDrawText("match#", vLayout/15);
+    setPen(hLayout/15, vLayout*3.5);
+    CNFGDrawText("auto\namount", vLayout/15);
+    setPen(hLayout/15, vLayout*4.5);
+    CNFGDrawText("ip", vLayout/15);
+
+
+
+    /* char* lastScore = scoreStr(ginfo.inf[ginfo.iPos-1]); */
+    /* setPen(hLayout/15, vLayout* 8.5); */
+    /* CNFGDrawText(lastScore, vLayout/15); */
+
+    char g[50];
+    sprintf(g, "auto: %d, games %d, %d", ginfo.autoType, games, gsData[0]);
+    setPen(hLayout/15, vLayout*12.5);
+    CNFGDrawText(g, vLayout/15);
+
+
+    char o[99];
+    for(i=0;i<sizeof(gsData)/sizeof(gsData[0]);i++) {
+      if(gsData[i] != -1) {
+	char oo[5];
+	sprintf(oo, "%d:%d ", i, gsData[i]);
+	strcat(o, oo);
+      }
+    }
+    setPen(hLayout/15, vLayout*15.5);
+    CNFGDrawText(o, vLayout/15);
+
+    vLayout = screeny/20;
+    hLayout = screenx/3;
+
+
+    char* isAutoLabel = "auto: true";
+    if(isauto == false) { isAutoLabel = "auto: false"; }
+
+    buttons[getButton('A')].label = isAutoLabel;
+
+
+    /* CNFGColor( 0x303030ff ); */
+    /* CNFGTackRectangle(10, 3 * l, screenx-10, 4*l); */
+    /* struct Button testButton = Button{fromX:15, fromY:5*l, toX:screenx-15, toY:6*l, }; */
+    /* struct Button tb; */
+    /* tb.fromX=15; */
+    /* tb.fromY=5*l; */
+    /* tb.toX=screenx-15; */
+    /* tb.toY=6*l; */
+    /* tb.label="button text"; */
+    /* tb.labelSize=l/15; */
+    /* tb.onClicked = &onClickTest; */
+    /* renderButton(tb); */
+    /* buttons[0] = tb; */
+
+
+    /* CNFGColor( 0xffffffff ); */
+    /* setPen(15, (3.5 * l)-(l/15*1.5)); */
+    /* CNFGColor( 0x123450ff ); */
+    /* CNFGDrawText("button text", l/15); */
+
+    /* centerText("centered text", 10); */
+    frames++;
+    if(lastbt > 0) {--lastbt;}
+    CNFGSwapBuffers();
+
+    ThisTime = OGGetAbsoluteTime();
+    if( ThisTime > LastFPSTime + 1 ) {
+      printf( "FPS: %d\n", frames );
+      frames = 0;
+      LastFPSTime+=1;
+    }
+  }
+
+  return(0);
 }
